@@ -1,0 +1,238 @@
+🔷 STEP 1: VPC (Virtual Private Cloud) Setup
+This isolates your infrastructure.
+
+🔧 Actions:
+Go to VPC Dashboard → Create VPC
+
+Name: LovelySkins-VPC
+
+IPv4 CIDR block: 10.0.0.0/16
+
+Create Subnets:
+
+2 Public subnets: 10.0.1.0/24, 10.0.2.0/24
+
+2 Private subnets: 10.0.3.0/24, 10.0.4.0/24
+
+Enable auto-assign public IP for public subnets
+
+Create Internet Gateway (IGW):
+
+Attach to your VPC
+
+Create NAT Gateway:
+
+Deploy in one public subnet
+
+Allocate Elastic IP
+
+Routes traffic from private subnets to the internet
+
+Create Route Tables:
+
+Public Route Table → Associate with public subnets → Add route: 0.0.0.0/0 → IGW
+
+Private Route Table → Associate with private subnets → Add route: 0.0.0.0/0 → NAT Gateway
+
+🔷 STEP 2: EC2 Setup for Node.js App
+This is where your backend runs.
+
+🔧 Actions:
+Launch EC2 in Private Subnet:
+
+AMI: Ubuntu or Amazon Linux 2
+
+Type: t3.medium or higher
+
+VPC: LovelySkins-VPC → Private Subnet
+
+IAM Role: Attach one with access to CloudWatch, SSM
+
+Security Group: Allow HTTP/HTTPS from ALB SG
+
+Configure EC2 for Node.js:
+
+SSH into EC2 using Bastion Host OR SSM
+
+Install:
+
+bash
+Copy
+Edit
+sudo apt update && sudo apt install nodejs npm git
+Clone your repo:
+
+bash
+Copy
+Edit
+git clone <your-repo-url>
+cd lovely-skins
+npm install
+Add .env with secrets or fetch from Parameter Store
+
+Run app:
+
+bash
+Copy
+Edit
+node app.js   # or use PM2
+🔷 STEP 3: Application Load Balancer (ALB)
+This directs traffic and provides fault tolerance.
+
+🔧 Actions:
+Go to EC2 > Load Balancers
+
+Create Application Load Balancer
+
+Internet-facing
+
+VPC: LovelySkins-VPC
+
+Subnets: Public subnets
+
+Create a Target Group:
+
+Type: Instances
+
+Protocol: HTTP (port 3000 or your app’s port)
+
+Register EC2 instances (ASG later)
+
+Add Listener:
+
+Forward HTTP/HTTPS requests to the Target Group
+
+🔷 STEP 4: Auto Scaling Group (ASG)
+For scalability and high availability.
+
+🔧 Actions:
+Create a custom AMI of your configured EC2
+
+Go to EC2 > Launch Templates
+
+Use the AMI
+
+Select Instance Type, IAM role, VPC, Key Pair
+
+Create Auto Scaling Group:
+
+Launch template: Select the one you created
+
+Network: LovelySkins-VPC
+
+Attach to the Target Group
+
+Scaling policy: Use CPU > 70% to scale out
+
+Availability Zones: Choose at least 2
+
+🔷 STEP 5: MongoDB Atlas Setup
+You already use this, but make sure it’s ready.
+
+🔧 Actions:
+Login to MongoDB Atlas
+
+Network Access:
+
+Add EC2 private subnet CIDR (or VPC IP range)
+
+Create DB User with strong password
+
+Get connection string (SRV)
+
+Store the connection string in .env or AWS Parameter Store
+
+🔷 STEP 6: Secure the App
+🔒 Security Groups:
+ALB SG: Allow inbound 80, 443 from anywhere
+
+EC2 SG: Allow inbound from ALB SG only (port 3000)
+
+🔐 HTTPS:
+Go to ACM (AWS Certificate Manager)
+
+Request public SSL cert for your domain (e.g. lovelyskins.com)
+
+Validate via DNS or Email
+
+Attach cert to ALB listener
+
+🔐 IAM:
+Attach EC2 role to allow access to:
+
+CloudWatch logs
+
+Parameter Store for secrets
+
+🔷 STEP 7: Static Files with S3 (Optional)
+Improve speed for CSS/JS/images.
+
+🔧 Actions:
+Create S3 Bucket: lovelyskins-assets
+
+Upload your static assets
+
+Enable static website hosting
+
+Set proper permissions for public access
+
+(Optional) Use CloudFront for CDN
+
+🔷 STEP 8: Monitoring & Logging
+🔧 Actions:
+Install CloudWatch Agent on EC2:
+
+bash
+Copy
+Edit
+sudo yum install amazon-cloudwatch-agent
+Configure to send logs:
+
+App logs
+
+System logs
+
+In CloudWatch:
+
+Set alarms for high CPU, memory, unhealthy hosts
+
+🔷 STEP 9: Backups & Disaster Recovery
+🔧 Actions:
+MongoDB Atlas:
+
+Enable continuous backup
+
+Set retention policy
+
+EC2 / ASG:
+
+Create regular AMIs (can automate via AWS Backup)
+
+Secrets:
+
+Store app secrets in AWS Systems Manager Parameter Store (secure string)
+
+🔷 STEP 10: Domain + DNS (Route 53)
+🔧 Actions:
+Register or transfer domain in Route 53
+
+Create a Hosted Zone
+
+Create A/AAAA record pointing to your ALB DNS
+
+(Optional) Enable failover routing to DR region
+
+🔷 (Optional) STEP 11: CI/CD Pipeline
+Use this to deploy new changes easily.
+
+🔧 Actions:
+Use GitHub Actions or AWS CodePipeline
+
+On push to main:
+
+SSH into EC2 (or use CodeDeploy agent)
+
+Pull latest code
+
+Restart Node.js using PM2/systemd
+
